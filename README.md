@@ -36,6 +36,9 @@ Das partizipative Herzstück der Installation. Statt eines Reglers speist das Mi
 Injizierte Zellen erscheinen als warm leuchtende Cluster in Amber-Orange und werden als solche Cluster platziert (nicht als Einzelpixel), damit sie sofort miteinander interagieren können — wie die Reaktionskammern in den Poren hydrothermaler Schlote, die Agüera y Arcas als mögliche Geburtsstätten des Lebens beschreibt. Ein Pegelanzeiger und der Entropie-Graph machen die Verbindung zwischen Schall, Energie und emergenter Ordnung sichtbar.
 In Agüera y Arcas’ eigenem interaktiven Game of Life auf der Begleitwebsite seines Buches dient ebenfalls Mikrofon-Input als Rauschquelle. Automaton Life macht aus dieser Idee ein räumliches, soziales Erlebnis: Die Besucher werden selbst zur Energiequelle des Universums.
 
+# Technische Umsetzung
+Die Simulation läuft als eigenständige Webanwendung auf einem dedizierten Rechner und wird über Bildschirm oder Projektion ausgegeben. Die gesamte Anwendung ist in einer einzigen HTML-Datei realisiert, ohne Serveranbindung, ohne Installation, ohne Abhängigkeiten. Sie läuft auf jedem modernen Browser und kann auf beliebiger Hardware betrieben werden.
+
 # Hintergrund und Referenzen
 Agüera y Arcas, B. — What is Intelligence? Lessons from AI About Evolution, Computing, and Minds (Antikythera / MIT Press, 2025). Argumentiert, dass Leben, Intelligenz und Bewusstsein aus Computation entstehen; zeigt in Artificial-Life-Experimenten, dass Replikatoren spontan aus zufälliger ‚Suppe“ emergieren, sobald die Bedingungen Computation zulassen. Diskutiert auch Conways Game of Life als Modell für Emergenz und die ‚Realität“ von Mustern.
 Conway, J.H. — Das Game of Life wurde 1970 durch Martin Gardners Kolumne in Scientific American weltbekannt. Conway starb 2020 an COVID-19.
