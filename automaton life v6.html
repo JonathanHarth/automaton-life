@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Automaton Life</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background:#030303; color:#eee; display:flex; flex-direction:column; height:100vh; overflow:hidden; font-family:'JetBrains Mono','Courier New',monospace; }
+
+        /* ===== TITLE SCREEN ===== */
+        .title-screen { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; background:rgba(2,2,2,0.82); backdrop-filter:blur(3px); transition:opacity 0.8s ease, backdrop-filter 0.8s ease; }
+        .title-screen.hidden { opacity:0; pointer-events:none; backdrop-filter:blur(0px); }
+        .title-content { display:flex; flex-direction:column; align-items:center; max-width:700px; padding:40px; }
+        .title-cells { display:flex; gap:4px; margin-bottom:32px; opacity:0; animation:titleFadeIn 1.2s ease 0.2s forwards; }
+        .title-cell { width:10px; height:10px; border-radius:1px; }
+        .title-cell.alive { background:currentColor; animation:cellPulse 3s ease-in-out infinite; }
+        .title-cell.dead { background:#1a1a1a; }
+        .title-cell:nth-child(2){animation-delay:.15s}.title-cell:nth-child(3){animation-delay:.3s}.title-cell:nth-child(5){animation-delay:.6s}.title-cell:nth-child(7){animation-delay:.45s}.title-cell:nth-child(8){animation-delay:.7s}
+        @keyframes cellPulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+        .title-main { font-family:'Cormorant Garamond','Georgia',serif; font-size:64px; font-weight:300; letter-spacing:.12em; color:#e8e8e8; text-transform:uppercase; line-height:1; margin-bottom:6px; opacity:0; animation:titleFadeIn 1.4s ease .3s forwards; }
+        .title-main span { font-weight:600; }
+        .title-sub { font-family:'JetBrains Mono',monospace; font-size:14px; color:#555; letter-spacing:.15em; text-transform:uppercase; margin-bottom:36px; opacity:0; animation:titleFadeIn 1.2s ease .6s forwards; }
+        .title-divider { width:60px; height:1px; background:linear-gradient(90deg,transparent,#333,transparent); margin-bottom:32px; opacity:0; animation:titleFadeIn 1s ease .8s forwards; }
+        .title-philosophy { font-family:'Cormorant Garamond',serif; font-size:22px; font-style:italic; color:#777; text-align:center; line-height:1.7; margin-bottom:14px; max-width:580px; opacity:0; animation:titleFadeIn 1.2s ease 1s forwards; }
+        .title-attribution { font-size:13px; color:#444; letter-spacing:.1em; margin-bottom:40px; opacity:0; animation:titleFadeIn 1s ease 1.2s forwards; }
+        .title-controls { display:grid; grid-template-columns:1fr 1fr; gap:10px 36px; margin-bottom:40px; opacity:0; animation:titleFadeIn 1s ease 1.4s forwards; }
+        .title-key { display:flex; align-items:center; gap:10px; font-size:13px; color:#555; }
+        .title-key kbd { background:#111; border:1px solid #2a2a2a; border-radius:3px; padding:3px 9px; font-size:12px; color:#777; font-family:'JetBrains Mono',monospace; min-width:28px; text-align:center; }
+        .title-sound { display:flex; align-items:center; gap:10px; margin-bottom:32px; opacity:0; animation:titleFadeIn 1s ease 1.5s forwards; pointer-events:all; cursor:pointer; }
+        .title-sound-icon { width:40px; height:40px; border:1px solid #2a2a2a; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; color:#555; transition:all .2s; background:#0a0a0a; }
+        .title-sound:hover .title-sound-icon { border-color:#444; color:#aaa; background:#151515; }
+        .title-sound.on .title-sound-icon { border-color:#4a6a5a; color:#8fc; background:#111; }
+        .title-sound-label { font-size:13px; color:#555; letter-spacing:.05em; }
+        .title-sound.on .title-sound-label { color:#8fc; }
+        .title-start { font-size:15px; color:#444; letter-spacing:.2em; text-transform:uppercase; opacity:0; animation:titleFadeIn 1s ease 1.8s forwards; }
+        .title-start-inner { animation:startPulse 2.5s ease-in-out infinite; }
+        @keyframes titleFadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes startPulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+
+        /* ===== MAIN UI ===== */
+        .canvas-wrap { flex-grow:1; overflow:hidden; position:relative; cursor:crosshair; display:flex; align-items:center; justify-content:center; }
+        .canvas-inner { position:relative; transform-origin:center center; }
+        canvas#lifeCanvas { image-rendering:pixelated; background:#000; display:block; }
+        .overlay { position:absolute; z-index:5; pointer-events:none; }
+        .info { top:12px; left:12px; font-size:11px; color:#555; line-height:1.6; }
+        .info .gen { color:#777; font-size:12px; }
+        .zoom-badge { top:12px; right:12px; background:rgba(0,0,0,.65); border:1px solid #2a2a2a; padding:4px 10px; font-size:11px; color:#666; border-radius:4px; backdrop-filter:blur(4px); }
+        .pop-graph { bottom:10px; right:12px; }
+        .pop-graph canvas { image-rendering:auto; border-radius:4px; background:rgba(5,5,5,.65); border:1px solid #1a1a1a; }
+        .entropy-graph { bottom:10px; left:12px; pointer-events:none; }
+        .entropy-graph canvas { image-rendering:auto; border-radius:4px; background:rgba(5,5,5,.65); border:1px solid #1a1a1a; }
+
+        .mic-indicator { bottom:96px; left:12px; pointer-events:none; background:rgba(5,5,5,.65); border:1px solid #1a1a1a; border-radius:4px; padding:8px 12px; min-width:180px; }
+        .mic-label { font-size:9px; color:#666; margin-bottom:5px; letter-spacing:.05em; }
+        .mic-bar-wrap { height:6px; background:#111; border-radius:3px; overflow:hidden; margin-bottom:4px; }
+        .mic-bar { height:100%; width:0%; border-radius:3px; transition:width 0.06s, background 0.15s; background:linear-gradient(90deg,#2a4a3a,#00ffcc); }
+        .mic-bar.hot { background:linear-gradient(90deg,#ffaa00,#ff3344); }
+        .mic-value { font-size:9px; color:#555; }
+        .ghost-info { bottom:56px; left:12px; font-size:11px; color:#555; }
+
+        .sound-indicator { position:absolute; top:12px; right:100px; z-index:15; cursor:pointer; display:flex; align-items:center; gap:6px; background:rgba(0,0,0,.5); border:1px solid #222; border-radius:4px; padding:4px 10px; font-size:10px; color:#555; transition:all .2s; }
+        .sound-indicator:hover { border-color:#444; color:#888; }
+        .sound-indicator.on { color:#8fc; border-color:#3a5a4a; }
+
+        /* Mode badge */
+        .mode-badge { position:absolute; top:38px; left:12px; font-size:10px; color:#444; letter-spacing:.06em; }
+
+        .pattern-panel { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:20; display:flex; gap:3px; background:rgba(8,8,8,.88); border:1px solid #222; border-radius:6px; padding:5px 8px; backdrop-filter:blur(8px); flex-wrap:wrap; max-width:96vw; justify-content:center; }
+        .pattern-btn { background:#141414; color:#888; border:1px solid #2a2a2a; padding:4px 9px; cursor:pointer; font-size:10px; font-family:'JetBrains Mono',monospace; border-radius:3px; transition:all .15s; white-space:nowrap; }
+        .pattern-btn:hover { background:#222; color:#ddd; border-color:#444; }
+        .pattern-btn.active { border-color:#666; color:#fff; background:#1e1e1e; }
+        .pat-divider { width:1px; background:#222; margin:0 4px; align-self:stretch; }
+
+        /* ===== CONTROLS BAR ===== */
+        .controls { height:88px; min-height:88px; background:#0a0a0a; border-top:1px solid #1a1a1a; display:flex; align-items:center; justify-content:center; padding:0 16px; z-index:10; gap:18px; }
+        .ctrl-section { display:flex; align-items:center; gap:6px; }
+        .ctrl-label { font-size:9px; color:#444; text-transform:uppercase; letter-spacing:.08em; margin-bottom:3px; }
+        .ctrl-col { display:flex; flex-direction:column; align-items:flex-start; }
+        button { background:#141414; color:#999; border:1px solid #2a2a2a; padding:6px 12px; cursor:pointer; font-size:11px; font-family:'JetBrains Mono',monospace; border-radius:3px; transition:all .15s; }
+        button:hover { background:#222; color:#fff; border-color:#444; }
+
+        .color-btn { width:20px; height:20px; border-radius:50%; border:2px solid #333; cursor:pointer; transition:all .15s; padding:0; }
+        .color-btn:hover { border-color:#888; transform:scale(1.15); }
+        .color-btn.active { border-color:#fff; box-shadow:0 0 6px rgba(255,255,255,.15); }
+
+        .species-btn { width:20px; height:20px; border-radius:50%; border:2px solid #333; cursor:pointer; transition:all .15s; padding:0; }
+        .species-btn:hover { border-color:#888; transform:scale(1.15); }
+        .species-btn.active { border-color:#fff; box-shadow:0 0 8px rgba(255,255,255,.2); }
+
+        .scenario-btn { padding:5px 10px; font-size:10px; }
+        .scenario-btn.active { border-color:#555; color:#fff; background:#1e1e1e; }
+
+        .toggle-wrap { display:flex; align-items:center; gap:6px; }
+        .toggle-switch { width:32px; height:18px; background:#222; border-radius:9px; position:relative; cursor:pointer; border:1px solid #333; transition:background .2s; }
+        .toggle-switch.on { background:#2a4a3a; border-color:#4a6a5a; }
+        .toggle-switch::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; background:#666; border-radius:50%; transition:all .2s; }
+        .toggle-switch.on::after { left:16px; background:#8fc; }
+
+        input[type="range"] { -webkit-appearance:none; appearance:none; height:3px; background:#222; border-radius:2px; outline:none; width:80px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; background:#777; border-radius:50%; cursor:pointer; }
+        input[type="range"]::-webkit-slider-thumb:hover { background:#aaa; }
+        .val-label { font-size:10px; color:#444; min-width:28px; text-align:right; }
+        .slider-row { display:flex; align-items:center; gap:6px; }
+        kbd { background:#151515; border:1px solid #2a2a2a; border-radius:2px; padding:0px 4px; font-size:9px; color:#555; font-family:inherit; }
+
+        /* Scenario transition overlay */
+        .scenario-overlay {
+            position:absolute; inset:0; z-index:30;
+            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+            background:rgba(0,0,0,0.7);
+            backdrop-filter:blur(2px);
+            opacity:0; pointer-events:none;
+            transition:opacity 0.3s;
+        }
+        .scenario-overlay.visible { opacity:1; }
+        .scenario-overlay-text {
+            font-family:'Cormorant Garamond',serif;
+            font-size:28px; color:#888;
+            font-style:italic; letter-spacing:.05em;
+        }
+        .scenario-overlay-sub {
+            font-size:11px; color:#555; letter-spacing:.08em;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== TITLE SCREEN ===== -->
+    <div class="title-screen" id="titleScreen">
+        <div class="title-content">
+            <div class="title-cells" style="color:#00ffcc;">
+                <div class="title-cell dead"></div><div class="title-cell alive"></div><div class="title-cell dead"></div>
+                <div class="title-cell dead"></div><div class="title-cell dead"></div><div class="title-cell dead"></div>
+                <div class="title-cell alive"></div><div class="title-cell alive"></div><div class="title-cell alive"></div>
+            </div>
+            <div class="title-main">Automaton <span>Life</span></div>
+            <div class="title-sub">A Cellular Automaton Simulation</div>
+            <div class="title-divider"></div>
+            <div class="title-philosophy">
+                „Aus drei simplen Regeln entsteht unvorhersehbare Komplexität — 
+                Geburt, Überleben und Tod erzeugen Muster, 
+                die niemand vorhergesagt hat."
+            </div>
+            <div class="title-attribution">Inspired by John Horton Conway's "Game of Life" (1970)</div>
+            <div class="title-controls">
+                <div class="title-key"><kbd>Space</kbd> Pause / Start</div>
+                <div class="title-key"><kbd>Maus</kbd> Zeichnen</div>
+                <div class="title-key"><kbd>Shift</kbd> Radierer</div>
+                <div class="title-key"><kbd>Scroll</kbd> Zoom</div>
+                <div class="title-key"><kbd>R</kbd> Muster drehen</div>
+                <div class="title-key"><kbd>Alt+Drag</kbd> Verschieben</div>
+                <div class="title-key"><kbd>T</kbd> Trails an/aus</div>
+                <div class="title-key"><kbd>C</kbd> Clear</div>
+            </div>
+            <div class="title-sound on" id="titleSoundToggle" onclick="toggleSoundPreference(event)">
+                <div class="title-sound-icon" id="titleSoundIcon">♪</div>
+                <div class="title-sound-label" id="titleSoundLabel">Sound wird beim Start abgespielt</div>
+            </div>
+            <div class="title-start"><div class="title-start-inner">Beliebige Taste drücken zum Starten</div></div>
+        </div>
+    </div>
+
+    <!-- ===== MAIN GAME ===== -->
+    <div class="canvas-wrap" id="canvasWrap">
+        <div class="info overlay" id="stats">
+            <div class="gen" id="genCounter">Gen 0</div>
+            <div id="cellCount">0 lebende Zellen</div>
+        </div>
+        <div class="mode-badge overlay" id="modeBadge"></div>
+        <div class="zoom-badge overlay" id="zoomBadge">100%</div>
+        <div class="sound-indicator" id="soundIndicator" onclick="toggleSound()" style="display:none;">
+            <span id="soundIcon">♪</span><span id="soundLabel">Sound</span>
+        </div>
+
+        <div class="pattern-panel" id="patternPanel">
+            <button class="pattern-btn active" data-pattern="brush">✏ Pinsel</button>
+            <div class="pat-divider"></div>
+            <button class="pattern-btn" data-pattern="glider" title="c/4 diagonal">Glider</button>
+            <button class="pattern-btn" data-pattern="lwss" title="c/2 Lightweight">LWSS</button>
+            <button class="pattern-btn" data-pattern="mwss" title="c/2 Middleweight">MWSS</button>
+            <button class="pattern-btn" data-pattern="hwss" title="c/2 Heavyweight">HWSS</button>
+            <button class="pattern-btn" data-pattern="copperhead" title="c/10 · zdr 2016">Copperhead</button>
+            <button class="pattern-btn" data-pattern="119p4h1v0" title="c/4 · Hickerson 1989">119P4H1V0</button>
+            <button class="pattern-btn" data-pattern="weekender" title="2c/7 · Eppstein 2000">Weekender</button>
+            <div class="pat-divider"></div>
+            <button class="pattern-btn" data-pattern="pulsar" title="Periode-3">Pulsar</button>
+            <button class="pattern-btn" data-pattern="pentadecathlon" title="Periode-15">Pentadeca.</button>
+            <div class="pat-divider"></div>
+            <button class="pattern-btn" data-pattern="glidergun" title="Gosper Glider Gun">Glider Gun</button>
+            <button class="pattern-btn" data-pattern="rpentomino" title="Methuselah · 1103 Gen">R-Pentomino</button>
+            <button class="pattern-btn" data-pattern="acorn" title="Methuselah · 5206 Gen">Acorn</button>
+            <button class="pattern-btn" data-pattern="diehard" title="Stirbt nach 130 Gen">Diehard</button>
+            <button class="pattern-btn" data-pattern="infgrowth" title="10 Zellen · ∞ Wachstum">∞ Growth</button>
+        </div>
+
+        <div class="ghost-info overlay" id="ghostInfo"></div>
+
+        <!-- Scenario transition -->
+        <div class="scenario-overlay" id="scenarioOverlay">
+            <div class="scenario-overlay-text" id="scenarioOverlayText"></div>
+            <div class="scenario-overlay-sub" id="scenarioOverlaySub"></div>
+        </div>
+
+        <div class="canvas-inner" id="canvasInner">
+            <canvas id="lifeCanvas"></canvas>
+        </div>
+
+        <div class="pop-graph overlay">
+            <canvas id="graphCanvas" width="220" height="80"></canvas>
+        </div>
+
+        <div class="entropy-graph overlay" id="entropyGraphWrap" style="display:none;">
+            <canvas id="entropyCanvas" width="220" height="70"></canvas>
+        </div>
+
+        <!-- Mic level indicator (resonanz mode) -->
+        <div class="mic-indicator overlay" id="micIndicator" style="display:none;">
+            <div class="mic-label">🎤 Raumlautstärke</div>
+            <div class="mic-bar-wrap">
+                <div class="mic-bar" id="micBar"></div>
+            </div>
+            <div class="mic-value" id="micValue">0%</div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <!-- Scenario -->
+        <div class="ctrl-col">
+            <span class="ctrl-label">Szenario</span>
+            <div class="ctrl-section">
+                <button class="scenario-btn active" id="scenClassic" onclick="startScenario('classic')">Klassisch</button>
+                <button class="scenario-btn" id="scenImmigration" onclick="startScenario('immigration')">Immigration</button>
+                <button class="scenario-btn" id="scenAbiogenesis" onclick="startScenario('abiogenesis')">Abiogenesis</button>
+                <button class="scenario-btn" id="scenResonanz" onclick="startScenario('resonanz')">Resonanz</button>
+            </div>
+        </div>
+
+        <div style="width:1px;height:40px;background:#1a1a1a;"></div>
+
+        <!-- Playback -->
+        <div class="ctrl-col">
+            <span class="ctrl-label">Steuerung</span>
+            <div class="ctrl-section">
+                <button onclick="togglePause()" id="pauseBtn" title="Leertaste">⏸ Pause</button>
+                <button onclick="stepOnce()" title="Einzelschritt">⏭</button>
+                <button onclick="clearGrid()">✕ Clear</button>
+                <button onclick="randomize()">✦ Urknall</button>
+            </div>
+        </div>
+        <div class="ctrl-col">
+            <span class="ctrl-label">Speed</span>
+            <div class="slider-row">
+                <span style="font-size:9px;color:#444;">1</span>
+                <input type="range" id="speedSlider" min="1" max="60" value="30">
+                <span style="font-size:9px;color:#444;">60</span>
+                <span class="val-label" id="speedVal">30</span>
+            </div>
+        </div>
+        <div class="ctrl-col">
+            <span class="ctrl-label">Pinsel</span>
+            <div class="slider-row">
+                <input type="range" id="brushSize" min="1" max="15" value="3">
+                <span class="val-label" id="brushVal">3</span>
+            </div>
+        </div>
+
+        <!-- Color (classic + abiogenesis mode) -->
+        <div class="ctrl-col" id="colorSection">
+            <span class="ctrl-label">Farbe</span>
+            <div class="ctrl-section" id="colorBtns">
+                <div class="color-btn active" style="background:#00ffcc;" onclick="changeColor(0,255,204,this)"></div>
+                <div class="color-btn" style="background:#ff0077;" onclick="changeColor(255,0,119,this)"></div>
+                <div class="color-btn" style="background:#4488ff;" onclick="changeColor(68,136,255,this)"></div>
+                <div class="color-btn" style="background:#ffcc00;" onclick="changeColor(255,204,0,this)"></div>
+                <div class="color-btn" style="background:#fff;" onclick="changeColor(255,255,255,this)"></div>
+            </div>
+        </div>
+
+        <!-- Species selector (immigration mode) -->
+        <div class="ctrl-col" id="speciesSection" style="display:none;">
+            <span class="ctrl-label">Spezies <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span>
+            <div class="ctrl-section">
+                <div class="species-btn active" style="background:#00ffcc;" onclick="selectSpecies(1,this)"></div>
+                <div class="species-btn" style="background:#ff3388;" onclick="selectSpecies(2,this)"></div>
+                <div class="species-btn" style="background:#ffaa00;" onclick="selectSpecies(3,this)"></div>
+            </div>
+        </div>
+
+        <!-- Cosmic ray mutation rate (abiogenesis mode) -->
+        <div class="ctrl-col" id="mutationSection" style="display:none;">
+            <span class="ctrl-label">Kosmische Strahlung ☢</span>
+            <div class="slider-row">
+                <span style="font-size:9px;color:#444;">0</span>
+                <input type="range" id="mutationSlider" min="0" max="200" value="50">
+                <span style="font-size:9px;color:#444;">200</span>
+                <span class="val-label" id="mutationVal">50</span>
+            </div>
+        </div>
+
+        <div class="ctrl-col">
+            <span class="ctrl-label">Trails <kbd>T</kbd></span>
+            <div class="toggle-wrap">
+                <div class="toggle-switch" id="trailToggle" onclick="toggleTrails()"></div>
+                <span class="val-label" id="trailLabel" style="min-width:20px;">off</span>
+            </div>
+        </div>
+        <div class="ctrl-col">
+            <span class="ctrl-label">Zoom <kbd>Scroll</kbd></span>
+            <div class="ctrl-section">
+                <button onclick="resetView()">⌂ Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // =====================================================
+    //  SETUP
+    // =====================================================
+    const canvas = document.getElementById('lifeCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const graphCanvas = document.getElementById('graphCanvas');
+    const graphCtx = graphCanvas.getContext('2d');
+    const entropyCanvas = document.getElementById('entropyCanvas');
+    const entropyCtx = entropyCanvas.getContext('2d');
+    const wrap = document.getElementById('canvasWrap');
+    const inner = document.getElementById('canvasInner');
+
+    const W = 800, H = 600;
+    canvas.width = W; canvas.height = H;
+
+    let grid = new Uint8Array(W * H);
+    let nextGrid = new Uint8Array(W * H);
+    let prevGrid = new Uint8Array(W * H); // for activity measurement
+    let trailGrid = new Float32Array(W * H);
+    let trailSpecies = new Uint8Array(W * H);
+    let trailsEnabled = false;
+    const TRAIL_DECAY = 0.93;
+
+    let paused = false;
+    let generation = 0;
+    let isDrawing = false;
+    let drawMode = 1;
+    let currentRGB = { r: 0, g: 255, b: 204 };
+
+    const popHistory = [];
+    const popHistoryS = [[], [], []];
+    const activityHistory = [];
+    const entropyHistory = [];
+    const POP_HISTORY_LEN = 220;
+    let targetFPS = 30;
+    let lastFrameTime = 0;
+
+    let zoom = 1, panX = 0, panY = 0;
+    let isPanning = false;
+    let panStartX, panStartY, panStartPX, panStartPY;
+    let activePattern = 'brush';
+    let patternRotation = 0;
+
+    // ===== GAME MODE =====
+    let gameMode = 'classic'; // 'classic', 'immigration', or 'abiogenesis'
+    let currentSpecies = 1;
+    let cosmicRayRate = 50; // cells per frame injected in abiogenesis
+
+    const SPECIES_COLORS = [
+        null,
+        { r: 0,   g: 255, b: 204 },
+        { r: 255, g: 51,  b: 136 },
+        { r: 255, g: 170, b: 0   }
+    ];
+
+    // =====================================================
+    //  TITLE SCREEN & SOUND
+    // =====================================================
+    let titleActive = true;
+    let soundEnabled = true;
+    let bgMusic = null;
+
+    function toggleSoundPreference(e) {
+        e.stopPropagation();
+        soundEnabled = !soundEnabled;
+        const tog = document.getElementById('titleSoundToggle');
+        tog.classList.toggle('on', soundEnabled);
+        document.getElementById('titleSoundLabel').textContent =
+            soundEnabled ? 'Sound wird beim Start abgespielt' : 'Sound ist deaktiviert';
+    }
+
+    function dismissTitle() {
+        if (!titleActive) return;
+        titleActive = false;
+        document.getElementById('titleScreen').classList.add('hidden');
+        document.getElementById('soundIndicator').style.display = 'flex';
+        updateSoundIndicator();
+        if (soundEnabled) startSound();
+        clearGrid();
+        placePattern(Math.floor(W/2), Math.floor(H/2), 'rpentomino');
+        zoom = 2.5; panX = 0; panY = 0;
+        updateCanvasTransform();
+        if (!trailsEnabled) toggleTrails();
+    }
+
+    function startSound() {
+        if (!bgMusic) { bgMusic = new Audio('Background.mp3'); bgMusic.loop = true; bgMusic.volume = 0.4; }
+        bgMusic.play().catch(() => console.log('Autoplay blocked'));
+    }
+    function toggleSound() {
+        soundEnabled = !soundEnabled;
+        if (soundEnabled) startSound(); else if (bgMusic) bgMusic.pause();
+        updateSoundIndicator();
+    }
+    function updateSoundIndicator() {
+        const ind = document.getElementById('soundIndicator');
+        ind.classList.toggle('on', soundEnabled);
+        document.getElementById('soundLabel').textContent = soundEnabled ? 'Sound an' : 'Sound aus';
+        ind.style.opacity = soundEnabled ? '1' : '0.6';
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (titleActive) { dismissTitle(); return; }
+        handleKeydown(e);
+    });
+    document.getElementById('titleScreen').addEventListener('click', (e) => {
+        if (e.target.closest('.title-sound')) return;
+        dismissTitle();
+    });
+
+    // =====================================================
+    //  MICROPHONE CAPTURE (Resonanz mode)
+    // =====================================================
+    let micStream = null;
+    let micAnalyser = null;
+    let micLevel = 0; // 0..1 normalized
+    let micActive = false;
+
+    async function startMic() {
+        if (micActive) return;
+        try {
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioCtx.createMediaStreamSource(micStream);
+            micAnalyser = audioCtx.createAnalyser();
+            micAnalyser.fftSize = 256;
+            micAnalyser.smoothingTimeConstant = 0.7;
+            source.connect(micAnalyser);
+            micActive = true;
+        } catch (err) {
+            console.log('Mic access denied:', err);
+            micActive = false;
+        }
+    }
+
+    function stopMic() {
+        if (micStream) {
+            micStream.getTracks().forEach(t => t.stop());
+            micStream = null;
+        }
+        micActive = false;
+        micLevel = 0;
+    }
+
+    function updateMicLevel() {
+        if (!micActive || !micAnalyser) { micLevel = 0; return; }
+        const buf = new Uint8Array(micAnalyser.frequencyBinCount);
+        micAnalyser.getByteFrequencyData(buf);
+        // RMS-ish average of frequency bins
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+        const rms = Math.sqrt(sum / buf.length) / 255;
+        // Apply curve: boost quiet signals, compress loud ones
+        micLevel = Math.pow(rms, 0.6);
+    }
+
+    // =====================================================
+    //  SCENARIOS
+    // =====================================================
+    function startScenario(mode) {
+        const overlay = document.getElementById('scenarioOverlay');
+        const text = document.getElementById('scenarioOverlayText');
+        const sub = document.getElementById('scenarioOverlaySub');
+
+        document.getElementById('scenClassic').classList.toggle('active', mode === 'classic');
+        document.getElementById('scenImmigration').classList.toggle('active', mode === 'immigration');
+        document.getElementById('scenAbiogenesis').classList.toggle('active', mode === 'abiogenesis');
+        document.getElementById('scenResonanz').classList.toggle('active', mode === 'resonanz');
+
+        const isResonanz = mode === 'resonanz';
+        const isAbio = mode === 'abiogenesis';
+        document.getElementById('colorSection').style.display = (mode === 'classic' || isAbio || isResonanz) ? '' : 'none';
+        document.getElementById('speciesSection').style.display = mode === 'immigration' ? '' : 'none';
+        document.getElementById('mutationSection').style.display = isAbio ? '' : 'none';
+        document.getElementById('entropyGraphWrap').style.display = (isAbio || isResonanz) ? '' : 'none';
+        document.getElementById('micIndicator').style.display = isResonanz ? '' : 'none';
+
+        if (isResonanz) {
+            text.textContent = 'Resonanz — Deine Stimme erzeugt Leben';
+            sub.textContent = 'Sprich, klatsche, singe — Schall wird zu Energie';
+        } else if (isAbio) {
+            text.textContent = 'Abiogenesis — Ordnung aus dem Rauschen';
+            sub.textContent = 'Ursuppe + Kosmische Strahlung · Beobachte die Emergenz';
+        } else if (mode === 'immigration') {
+            text.textContent = 'Immigration — 3 Spezies, 1 Welt';
+            sub.textContent = '';
+        } else {
+            text.textContent = 'Klassisch — Conway\'s Game of Life';
+            sub.textContent = '';
+        }
+        overlay.classList.add('visible');
+        paused = true;
+        updatePauseBtn();
+        clearGrid();
+
+        // Stop mic if leaving resonanz
+        if (!isResonanz && micActive) stopMic();
+
+        setTimeout(() => {
+            gameMode = mode;
+            if (mode === 'immigration') {
+                seedImmigration();
+            } else if (isAbio) {
+                seedAbiogenesis();
+            } else if (isResonanz) {
+                seedResonanz();
+            } else {
+                randomize();
+            }
+            resetView();
+            if (!trailsEnabled) toggleTrails();
+            paused = false;
+            updatePauseBtn();
+            updateModeBadge();
+
+            // Abiogenesis: crank speed to max, set mutation rate
+            if (mode === 'abiogenesis') {
+                targetFPS = 60;
+                document.getElementById('speedSlider').value = 60;
+                document.getElementById('speedVal').textContent = '60';
+                cosmicRayRate = 50;
+                document.getElementById('mutationSlider').value = 50;
+                document.getElementById('mutationVal').textContent = '50';
+            }
+
+            // Resonanz: crank speed, start mic
+            if (isResonanz) {
+                targetFPS = 60;
+                document.getElementById('speedSlider').value = 60;
+                document.getElementById('speedVal').textContent = '60';
+                startMic();
+            }
+
+            setTimeout(() => overlay.classList.remove('visible'), 300);
+        }, 1600);
+    }
+
+    function seedResonanz() {
+        grid.fill(0); prevGrid.fill(0);
+        generation = 0;
+        popHistory.length = 0; activityHistory.length = 0; entropyHistory.length = 0;
+        trailGrid.fill(0); trailSpecies.fill(0);
+        // Start nearly empty — sound will bring it to life
+        // Seed a few tiny clusters so it's not completely void
+        for (let i = 0; i < 20; i++) {
+            const cx = Math.floor(Math.random() * W);
+            const cy = Math.floor(Math.random() * H);
+            // Place a random 3x3 kernel
+            for (let dy = -1; dy <= 1; dy++)
+                for (let dx = -1; dx <= 1; dx++)
+                    if (Math.random() < 0.5)
+                        grid[((cy+dy+H)%H)*W + ((cx+dx+W)%W)] = 1;
+        }
+    }
+
+    function seedImmigration() {
+        grid.fill(0); prevGrid.fill(0);
+        generation = 0;
+        popHistory.length = 0;
+        popHistoryS[0].length = 0; popHistoryS[1].length = 0; popHistoryS[2].length = 0;
+        activityHistory.length = 0; entropyHistory.length = 0;
+        trailGrid.fill(0); trailSpecies.fill(0);
+        for (let y = 0; y < H; y++)
+            for (let x = 0; x < W; x++)
+                if (Math.random() > 0.87) {
+                    let species;
+                    if (x < W / 3) species = 1;
+                    else if (x < 2 * W / 3) species = 2;
+                    else species = 3;
+                    grid[y * W + x] = species;
+                }
+    }
+
+    function seedAbiogenesis() {
+        grid.fill(0); prevGrid.fill(0);
+        generation = 0;
+        popHistory.length = 0; activityHistory.length = 0; entropyHistory.length = 0;
+        trailGrid.fill(0); trailSpecies.fill(0);
+
+        // Sparse soup: ~6% density — "primordial broth"
+        // Enough for local chemistry to ignite, but mostly void
+        const density = 0.06;
+        for (let i = 0; i < grid.length; i++) {
+            grid[i] = Math.random() < density ? 1 : 0;
+        }
+    }
+
+    function updateModeBadge() {
+        const el = document.getElementById('modeBadge');
+        if (gameMode === 'immigration') {
+            el.innerHTML = '<span style="color:#00ffcc;">●</span> <span style="color:#ff3388;">●</span> <span style="color:#ffaa00;">●</span> Immigration';
+        } else if (gameMode === 'abiogenesis') {
+            el.innerHTML = '<span style="color:#666;">◇</span> Abiogenesis';
+        } else if (gameMode === 'resonanz') {
+            el.innerHTML = '<span style="color:#ff6644;">🎤</span> Resonanz';
+        } else {
+            el.textContent = '';
+        }
+    }
+
+    function selectSpecies(num, el) {
+        currentSpecies = num;
+        document.querySelectorAll('.species-btn').forEach(b => b.classList.remove('active'));
+        if (el) el.classList.add('active');
+    }
+
+    // =====================================================
+    //  PATTERN LIBRARY
+    // =====================================================
+    function parseGrid(str) {
+        const lines = str.trim().split('\n').map(l => l.trim());
+        const cells = [];
+        for (let y = 0; y < lines.length; y++)
+            for (let x = 0; x < lines[y].length; x++)
+                if (lines[y][x] === 'O') cells.push([x, y]);
+        return cells;
+    }
+
+    const PATTERNS = {
+        glider: { name:'Glider', desc:'c/4 diagonal', cells:[[1,0],[2,1],[0,2],[1,2],[2,2]] },
+        lwss: { name:'LWSS', desc:'c/2', cells:[[1,0],[4,0],[0,1],[0,2],[4,2],[0,3],[1,3],[2,3],[3,3]] },
+        mwss: { name:'MWSS', desc:'c/2', cells:[[2,0],[0,1],[4,1],[5,2],[0,2],[0,3],[5,3],[0,4],[1,4],[2,4],[3,4],[4,4]] },
+        hwss: { name:'HWSS', desc:'c/2', cells:[[2,0],[3,0],[0,1],[5,1],[6,2],[0,2],[0,3],[6,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4]] },
+        copperhead: { name:'Copperhead', desc:'c/10 · zdr 2016', cells:parseGrid(`.OOOO.\n......\n.O..O.\nO.OO.O\nO....O\n......\nO....O\nOO..OO\nOOOOOO\n.O..O.\n..OO..\n..OO..`) },
+        '119p4h1v0': { name:'119P4H1V0', desc:'c/4 · Hickerson 1989', cells:parseGrid(`.................................O.\n................O...............O.O\n......O.O......O.....OO........O..\n......O....O....O.OOOOOO....OO....\n......O.OOOOOOOO..........O..O.OOO\n.........O.....O.......OOOO....OOO\n....OO.................OOO.O......\n.O..OO.......OO........OO........\n.O..O.............................\nO.................................\n.O..O.............................\n.O..OO.......OO........OO........\n....OO.................OOO.O......\n.........O.....O.......OOOO....OOO\n......O.OOOOOOOO..........O..O.OOO\n......O....O....O.OOOOOO....OO....\n......O.O......O.....OO........O..\n................O...............O.O\n.................................O.`) },
+        weekender: { name:'Weekender', desc:'2c/7 · Eppstein 2000', cells:parseGrid(`.O............O.\n.O............O.\nO.O..........O.O\n.O............O.\n.O............O.\n..O...OOOO...O..\n......OOOO......\n..OOOO....OOOO..\n................\n....O......O....\n.....OO..OO.....`) },
+        pulsar: { name:'Pulsar', desc:'Periode-3', cells:(function(){ const q=[[2,0],[3,0],[4,0],[0,2],[0,3],[0,4],[5,2],[5,3],[5,4],[2,5],[3,5],[4,5]]; const a=[]; for(const[x,y]of q)a.push([x+1,y+1],[14-x,y+1],[x+1,14-y],[14-x,14-y]); const s=new Set(a.map(c=>c.join(','))); return[...s].map(v=>v.split(',').map(Number)); })() },
+        pentadecathlon: { name:'Pentadecathlon', desc:'Periode-15', cells:parseGrid(`..O....O..\nOO.OOOO.OO\n..O....O..`) },
+        glidergun: { name:'Gosper Glider Gun', desc:'Endlos Glider', cells:[[24,0],[22,1],[24,1],[12,2],[13,2],[20,2],[21,2],[34,2],[35,2],[11,3],[15,3],[20,3],[21,3],[34,3],[35,3],[0,4],[1,4],[10,4],[16,4],[20,4],[21,4],[0,5],[1,5],[10,5],[14,5],[16,5],[17,5],[22,5],[24,5],[10,6],[16,6],[24,6],[11,7],[15,7],[12,8],[13,8]] },
+        rpentomino: { name:'R-Pentomino', desc:'Methuselah · 1103 Gen', cells:[[1,0],[2,0],[0,1],[1,1],[1,2]] },
+        acorn: { name:'Acorn', desc:'Methuselah · 5206 Gen', cells:[[1,0],[3,1],[0,2],[1,2],[4,2],[5,2],[6,2]] },
+        diehard: { name:'Diehard', desc:'Stirbt nach 130 Gen', cells:[[6,0],[0,1],[1,1],[1,2],[5,2],[6,2],[7,2]] },
+        infgrowth: { name:'∞ Growth', desc:'10 Zellen · ∞ Wachstum', cells:[[6,0],[4,1],[6,1],[7,1],[4,2],[6,2],[4,3],[2,4],[0,5],[2,5]] }
+    };
+
+    // =====================================================
+    //  PATTERN PLACEMENT
+    // =====================================================
+    function rotatePattern(cells, times) {
+        let r = cells.map(c => [...c]);
+        for (let t = 0; t < times; t++) r = r.map(([x,y]) => [-y, x]);
+        const minX = Math.min(...r.map(c=>c[0])), minY = Math.min(...r.map(c=>c[1]));
+        return r.map(([x,y]) => [x-minX, y-minY]);
+    }
+
+    function placePattern(px, py, key) {
+        const pat = PATTERNS[key]; if (!pat) return;
+        const cells = rotatePattern(pat.cells, patternRotation % 4);
+        const maxX = Math.max(...cells.map(c=>c[0])), maxY = Math.max(...cells.map(c=>c[1]));
+        const offX = Math.floor(maxX/2), offY = Math.floor(maxY/2);
+        const val = gameMode === 'immigration' ? currentSpecies : 1;
+        for (const [cx,cy] of cells) {
+            grid[((py+cy-offY+H)%H)*W + ((px+cx-offX+W)%W)] = val;
+        }
+    }
+
+    document.querySelectorAll('.pattern-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.pattern-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activePattern = btn.dataset.pattern; patternRotation = 0; updateGhostInfo();
+        });
+    });
+    function updateGhostInfo() {
+        const el = document.getElementById('ghostInfo');
+        if (activePattern === 'brush') { el.textContent = ''; return; }
+        const p = PATTERNS[activePattern];
+        el.textContent = `${p?.name} · ${p?.desc} — Klick platzieren · R drehen (${patternRotation*90}°)`;
+    }
+
+    // =====================================================
+    //  COLOR & TRAILS
+    // =====================================================
+    function changeColor(r, g, b, el) {
+        currentRGB = { r, g, b };
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+        if (el) el.classList.add('active');
+    }
+    function toggleTrails() {
+        trailsEnabled = !trailsEnabled;
+        document.getElementById('trailToggle').classList.toggle('on', trailsEnabled);
+        document.getElementById('trailLabel').textContent = trailsEnabled ? 'on' : 'off';
+        if (!trailsEnabled) { trailGrid.fill(0); trailSpecies.fill(0); }
+    }
+
+    // =====================================================
+    //  GRID OPS
+    // =====================================================
+    function randomize() {
+        if (gameMode === 'immigration') { seedImmigration(); return; }
+        if (gameMode === 'abiogenesis') { seedAbiogenesis(); return; }
+        if (gameMode === 'resonanz') { seedResonanz(); return; }
+        for (let i = 0; i < grid.length; i++) grid[i] = Math.random() > 0.85 ? 1 : 0;
+        generation = 0; popHistory.length = 0; activityHistory.length = 0; entropyHistory.length = 0;
+        trailGrid.fill(0); trailSpecies.fill(0);
+    }
+    function clearGrid() {
+        grid.fill(0); prevGrid.fill(0); generation = 0;
+        popHistory.length = 0;
+        popHistoryS[0].length = 0; popHistoryS[1].length = 0; popHistoryS[2].length = 0;
+        activityHistory.length = 0; entropyHistory.length = 0;
+        trailGrid.fill(0); trailSpecies.fill(0);
+    }
+    function togglePause() { paused = !paused; updatePauseBtn(); }
+    function updatePauseBtn() { document.getElementById('pauseBtn').innerHTML = paused ? "▶ Start" : "⏸ Pause"; }
+    function stepOnce() { if (!paused) togglePause(); computeNextGen(); }
+
+    // =====================================================
+    //  ZOOM & PAN
+    // =====================================================
+    function updateCanvasTransform() {
+        const wr = wrap.getBoundingClientRect();
+        const s = Math.min(wr.width/W, wr.height/H) * zoom;
+        inner.style.width = W*s+'px'; inner.style.height = H*s+'px';
+        canvas.style.width = W*s+'px'; canvas.style.height = H*s+'px';
+        inner.style.transform = `translate(${panX}px,${panY}px)`;
+        document.getElementById('zoomBadge').textContent = Math.round(zoom*100)+'%';
+    }
+    function resetView() { zoom=1; panX=0; panY=0; updateCanvasTransform(); }
+
+    wrap.addEventListener('wheel', (e) => {
+        if (titleActive) return; e.preventDefault();
+        const rect=wrap.getBoundingClientRect();
+        const mx=e.clientX-rect.left-rect.width/2, my=e.clientY-rect.top-rect.height/2;
+        const old=zoom; zoom=Math.max(0.5,Math.min(20,zoom*(e.deltaY>0?0.9:1.1)));
+        panX=mx-(mx-panX)*(zoom/old); panY=my-(my-panY)*(zoom/old);
+        updateCanvasTransform();
+    }, {passive:false});
+
+    wrap.addEventListener('mousedown', (e) => {
+        if (titleActive) return;
+        if (e.button===1||(e.button===0&&e.altKey)) {
+            e.preventDefault(); isPanning=true;
+            panStartX=e.clientX; panStartY=e.clientY; panStartPX=panX; panStartPY=panY;
+            wrap.style.cursor='grabbing';
+        }
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (isPanning) { panX=panStartPX+(e.clientX-panStartX); panY=panStartPY+(e.clientY-panStartY); updateCanvasTransform(); }
+    });
+    window.addEventListener('mouseup', () => { if(isPanning){isPanning=false;wrap.style.cursor='crosshair';} });
+
+    // =====================================================
+    //  DRAWING
+    // =====================================================
+    function screenToGrid(e) {
+        const r=canvas.getBoundingClientRect();
+        return {x:Math.floor((e.clientX-r.left)*W/r.width), y:Math.floor((e.clientY-r.top)*H/r.height)};
+    }
+    function brushDraw(e) {
+        if (!isDrawing) return;
+        const {x:px,y:py}=screenToGrid(e);
+        const sz=parseInt(document.getElementById('brushSize').value);
+        const val = drawMode === 0 ? 0 : (gameMode === 'immigration' ? currentSpecies : 1);
+        for (let i=-sz;i<sz;i++)
+            for (let j=-sz;j<sz;j++) {
+                if(i*i+j*j>sz*sz) continue;
+                grid[((py+j+H)%H)*W+((px+i+W)%W)] = val;
+            }
+    }
+    canvas.addEventListener('mousedown', (e) => {
+        if (titleActive||e.button!==0||e.altKey) return;
+        const p=screenToGrid(e);
+        if (activePattern!=='brush') { placePattern(p.x,p.y,activePattern); return; }
+        drawMode=e.shiftKey?0:1; isDrawing=true; brushDraw(e);
+    });
+    canvas.addEventListener('mousemove', (e) => { if(activePattern==='brush') brushDraw(e); });
+    window.addEventListener('mouseup', () => isDrawing=false);
+
+    // =====================================================
+    //  KEYBOARD
+    // =====================================================
+    function handleKeydown(e) {
+        if (e.code==='Space') { e.preventDefault(); togglePause(); }
+        if (e.code==='KeyR'&&activePattern!=='brush') { patternRotation=(patternRotation+1)%4; updateGhostInfo(); }
+        if (e.code==='KeyC') clearGrid();
+        if (e.code==='KeyT') toggleTrails();
+        if (e.code==='KeyM') toggleSound();
+        if (gameMode==='immigration') {
+            if (e.code==='Digit1') selectSpecies(1, document.querySelectorAll('.species-btn')[0]);
+            if (e.code==='Digit2') selectSpecies(2, document.querySelectorAll('.species-btn')[1]);
+            if (e.code==='Digit3') selectSpecies(3, document.querySelectorAll('.species-btn')[2]);
+        }
+        if (e.code==='Escape') {
+            document.querySelectorAll('.pattern-btn').forEach(b=>b.classList.remove('active'));
+            document.querySelector('[data-pattern="brush"]').classList.add('active');
+            activePattern='brush'; patternRotation=0; updateGhostInfo();
+        }
+    }
+
+    // =====================================================
+    //  SLIDERS
+    // =====================================================
+    document.getElementById('speedSlider').addEventListener('input', function() { targetFPS=parseInt(this.value); document.getElementById('speedVal').textContent=targetFPS; });
+    document.getElementById('brushSize').addEventListener('input', function() { document.getElementById('brushVal').textContent=this.value; });
+    document.getElementById('mutationSlider').addEventListener('input', function() { cosmicRayRate=parseInt(this.value); document.getElementById('mutationVal').textContent=cosmicRayRate; });
+
+    // =====================================================
+    //  ENTROPY / ORDER MEASUREMENT
+    // =====================================================
+    function computeEntropy() {
+        // 1) Activity: fraction of cells that changed since last frame
+        let changed = 0;
+        for (let i = 0; i < grid.length; i++) {
+            if (grid[i] !== prevGrid[i]) changed++;
+        }
+        const activity = changed / grid.length;
+
+        // 2) Block entropy: Shannon entropy over all 2x2 block configurations
+        //    16 possible configs for binary (alive/dead). Sample every 4th pixel for performance.
+        const blockCounts = new Uint32Array(16);
+        let totalBlocks = 0;
+        const step = 2; // sample every 2nd block position
+        for (let y = 0; y < H - 1; y += step) {
+            for (let x = 0; x < W - 1; x += step) {
+                const a = grid[y * W + x] > 0 ? 1 : 0;
+                const b = grid[y * W + x + 1] > 0 ? 1 : 0;
+                const c = grid[(y + 1) * W + x] > 0 ? 1 : 0;
+                const d = grid[(y + 1) * W + x + 1] > 0 ? 1 : 0;
+                blockCounts[(a << 3) | (b << 2) | (c << 1) | d]++;
+                totalBlocks++;
+            }
+        }
+        let shannonH = 0;
+        for (let i = 0; i < 16; i++) {
+            if (blockCounts[i] === 0) continue;
+            const p = blockCounts[i] / totalBlocks;
+            shannonH -= p * Math.log2(p);
+        }
+        // Normalize: max entropy for 16 bins = log2(16) = 4
+        const normalizedEntropy = shannonH / 4.0;
+
+        // "Order" = 1 - normalized entropy (1 = perfect order, 0 = maximum disorder)
+        const order = 1.0 - normalizedEntropy;
+
+        // Save previous grid for next frame's activity calc
+        prevGrid.set(grid);
+
+        return { activity, order, normalizedEntropy };
+    }
+
+    // =====================================================
+    //  SIMULATION
+    // =====================================================
+    const imgData = ctx.createImageData(W, H);
+    const data = imgData.data;
+
+    function computeNextGen() {
+        if (gameMode === 'immigration') { computeImmigration(); return; }
+        for (let y=0;y<H;y++) {
+            for (let x=0;x<W;x++) {
+                const idx=y*W+x; let n=0;
+                for (let i=-1;i<=1;i++) for (let j=-1;j<=1;j++) {
+                    if(i===0&&j===0) continue;
+                    if(grid[((y+j+H)%H)*W+((x+i+W)%W)]>0) n++;
+                }
+                if (grid[idx]>0&&(n<2||n>3)) nextGrid[idx]=0;
+                else if (grid[idx]===0&&n===3) nextGrid[idx]=1;
+                else nextGrid[idx]=grid[idx]>0?1:0;
+            }
+        }
+        grid.set(nextGrid); generation++;
+    }
+
+    function computeImmigration() {
+        for (let y=0;y<H;y++) {
+            for (let x=0;x<W;x++) {
+                const idx=y*W+x;
+                let totalN=0;
+                let sc=[0,0,0,0];
+                for (let i=-1;i<=1;i++) for (let j=-1;j<=1;j++) {
+                    if(i===0&&j===0) continue;
+                    const v=grid[((y+j+H)%H)*W+((x+i+W)%W)];
+                    if(v>0) { totalN++; sc[v]++; }
+                }
+                const alive=grid[idx]>0;
+                if (alive&&(totalN<2||totalN>3)) {
+                    nextGrid[idx]=0;
+                } else if (!alive&&totalN===3) {
+                    let maxS=1;
+                    if(sc[2]>sc[maxS]) maxS=2;
+                    if(sc[3]>sc[maxS]) maxS=3;
+                    nextGrid[idx]=maxS;
+                } else {
+                    nextGrid[idx]=grid[idx];
+                }
+            }
+        }
+        grid.set(nextGrid); generation++;
+    }
+
+    // =====================================================
+    //  POPULATION GRAPH
+    // =====================================================
+    function drawPopGraph(total, counts) {
+        popHistory.push(total);
+        if (popHistory.length>POP_HISTORY_LEN) popHistory.shift();
+
+        if (gameMode==='immigration' && counts) {
+            for (let s=0;s<3;s++) {
+                popHistoryS[s].push(counts[s+1]||0);
+                if(popHistoryS[s].length>POP_HISTORY_LEN) popHistoryS[s].shift();
+            }
+        }
+
+        const gW=graphCanvas.width, gH=graphCanvas.height;
+        graphCtx.clearRect(0,0,gW,gH);
+        graphCtx.fillStyle='rgba(5,5,5,0.6)';
+        graphCtx.fillRect(0,0,gW,gH);
+
+        graphCtx.strokeStyle='#1a1a1a'; graphCtx.lineWidth=0.5;
+        for(let i=1;i<4;i++){const gy=(gH/4)*i;graphCtx.beginPath();graphCtx.moveTo(0,gy);graphCtx.lineTo(gW,gy);graphCtx.stroke();}
+
+        if (gameMode==='immigration') {
+            const allVals = [...popHistoryS[0],...popHistoryS[1],...popHistoryS[2]];
+            const max = Math.max(100, ...allVals);
+            for (let s=0;s<3;s++) {
+                const hist=popHistoryS[s];
+                if(hist.length<2) continue;
+                const sc=SPECIES_COLORS[s+1];
+                const cr=`rgb(${sc.r},${sc.g},${sc.b})`;
+                const grad=graphCtx.createLinearGradient(0,0,0,gH);
+                grad.addColorStop(0,`rgba(${sc.r},${sc.g},${sc.b},0.12)`);
+                grad.addColorStop(1,'rgba(0,0,0,0)');
+                graphCtx.beginPath(); graphCtx.moveTo(0,gH);
+                for(let i=0;i<hist.length;i++) graphCtx.lineTo((i/(POP_HISTORY_LEN-1))*gW, gH-(hist[i]/max)*(gH-4));
+                graphCtx.lineTo(((hist.length-1)/(POP_HISTORY_LEN-1))*gW,gH);
+                graphCtx.closePath(); graphCtx.fillStyle=grad; graphCtx.fill();
+                graphCtx.beginPath();
+                for(let i=0;i<hist.length;i++){
+                    const x=(i/(POP_HISTORY_LEN-1))*gW, y=gH-(hist[i]/max)*(gH-4);
+                    i===0?graphCtx.moveTo(x,y):graphCtx.lineTo(x,y);
+                }
+                graphCtx.strokeStyle=cr; graphCtx.lineWidth=1.2; graphCtx.stroke();
+            }
+        } else {
+            const max=Math.max(100,...popHistory);
+            if(popHistory.length>1){
+                const{r,g,b}=currentRGB;
+                const grad=graphCtx.createLinearGradient(0,0,0,gH);
+                grad.addColorStop(0,`rgba(${r},${g},${b},0.25)`);
+                grad.addColorStop(1,'rgba(0,0,0,0)');
+                graphCtx.beginPath();graphCtx.moveTo(0,gH);
+                for(let i=0;i<popHistory.length;i++) graphCtx.lineTo((i/(POP_HISTORY_LEN-1))*gW,gH-(popHistory[i]/max)*(gH-4));
+                graphCtx.lineTo(((popHistory.length-1)/(POP_HISTORY_LEN-1))*gW,gH);
+                graphCtx.closePath();graphCtx.fillStyle=grad;graphCtx.fill();
+                graphCtx.beginPath();
+                for(let i=0;i<popHistory.length;i++){
+                    const x=(i/(POP_HISTORY_LEN-1))*gW,y=gH-(popHistory[i]/max)*(gH-4);
+                    i===0?graphCtx.moveTo(x,y):graphCtx.lineTo(x,y);
+                }
+                graphCtx.strokeStyle=`rgb(${r},${g},${b})`;graphCtx.lineWidth=1.5;graphCtx.stroke();
+                const lx=((popHistory.length-1)/(POP_HISTORY_LEN-1))*gW;
+                const ly=gH-(popHistory[popHistory.length-1]/max)*(gH-4);
+                graphCtx.beginPath();graphCtx.arc(lx,ly,2.5,0,Math.PI*2);
+                graphCtx.fillStyle=`rgb(${r},${g},${b})`;graphCtx.fill();
+            }
+        }
+
+        graphCtx.fillStyle='#555'; graphCtx.font='9px JetBrains Mono,monospace';
+        graphCtx.fillText(`Pop: ${total.toLocaleString()}`,4,11);
+    }
+
+    // =====================================================
+    //  ENTROPY GRAPH (Abiogenesis mode)
+    // =====================================================
+    function drawEntropyGraph(metrics) {
+        activityHistory.push(metrics.activity);
+        entropyHistory.push(metrics.order);
+        if (activityHistory.length > POP_HISTORY_LEN) activityHistory.shift();
+        if (entropyHistory.length > POP_HISTORY_LEN) entropyHistory.shift();
+
+        const eW = entropyCanvas.width, eH = entropyCanvas.height;
+        entropyCtx.clearRect(0, 0, eW, eH);
+        entropyCtx.fillStyle = 'rgba(5,5,5,0.6)';
+        entropyCtx.fillRect(0, 0, eW, eH);
+
+        // Grid lines
+        entropyCtx.strokeStyle = '#1a1a1a'; entropyCtx.lineWidth = 0.5;
+        for (let i = 1; i < 4; i++) {
+            const gy = (eH / 4) * i;
+            entropyCtx.beginPath(); entropyCtx.moveTo(0, gy); entropyCtx.lineTo(eW, gy); entropyCtx.stroke();
+        }
+
+        // Activity curve (warm red/orange — high = chaotic, dropping = stabilizing)
+        if (activityHistory.length > 1) {
+            const actColor = { r: 255, g: 100, b: 50 };
+            const grad = entropyCtx.createLinearGradient(0, 0, 0, eH);
+            grad.addColorStop(0, `rgba(${actColor.r},${actColor.g},${actColor.b},0.15)`);
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            entropyCtx.beginPath(); entropyCtx.moveTo(0, eH);
+            for (let i = 0; i < activityHistory.length; i++) {
+                const x = (i / (POP_HISTORY_LEN - 1)) * eW;
+                const y = eH - activityHistory[i] * (eH - 4);
+                entropyCtx.lineTo(x, y);
+            }
+            entropyCtx.lineTo(((activityHistory.length - 1) / (POP_HISTORY_LEN - 1)) * eW, eH);
+            entropyCtx.closePath(); entropyCtx.fillStyle = grad; entropyCtx.fill();
+
+            entropyCtx.beginPath();
+            for (let i = 0; i < activityHistory.length; i++) {
+                const x = (i / (POP_HISTORY_LEN - 1)) * eW;
+                const y = eH - activityHistory[i] * (eH - 4);
+                i === 0 ? entropyCtx.moveTo(x, y) : entropyCtx.lineTo(x, y);
+            }
+            entropyCtx.strokeStyle = `rgb(${actColor.r},${actColor.g},${actColor.b})`;
+            entropyCtx.lineWidth = 1.2; entropyCtx.stroke();
+        }
+
+        // Order curve (cool blue/white — rising = structure emerging)
+        if (entropyHistory.length > 1) {
+            const ordColor = { r: 120, g: 180, b: 255 };
+            entropyCtx.beginPath();
+            for (let i = 0; i < entropyHistory.length; i++) {
+                const x = (i / (POP_HISTORY_LEN - 1)) * eW;
+                const y = eH - entropyHistory[i] * (eH - 4);
+                i === 0 ? entropyCtx.moveTo(x, y) : entropyCtx.lineTo(x, y);
+            }
+            entropyCtx.strokeStyle = `rgb(${ordColor.r},${ordColor.g},${ordColor.b})`;
+            entropyCtx.lineWidth = 1.2; entropyCtx.stroke();
+
+            // End dot
+            const lx = ((entropyHistory.length - 1) / (POP_HISTORY_LEN - 1)) * eW;
+            const ly = eH - entropyHistory[entropyHistory.length - 1] * (eH - 4);
+            entropyCtx.beginPath(); entropyCtx.arc(lx, ly, 2, 0, Math.PI * 2);
+            entropyCtx.fillStyle = `rgb(${ordColor.r},${ordColor.g},${ordColor.b})`;
+            entropyCtx.fill();
+        }
+
+        // Labels
+        entropyCtx.font = '8px JetBrains Mono,monospace';
+        entropyCtx.fillStyle = 'rgb(255,100,50)';
+        entropyCtx.fillText(`Aktivität: ${(metrics.activity * 100).toFixed(1)}%`, 4, 10);
+        entropyCtx.fillStyle = 'rgb(120,180,255)';
+        entropyCtx.fillText(`Ordnung: ${(metrics.order * 100).toFixed(1)}%`, 4, 20);
+    }
+
+    // =====================================================
+    //  RENDER LOOP
+    // =====================================================
+    function update(ts) {
+        requestAnimationFrame(update);
+        if(ts-lastFrameTime<1000/targetFPS) return;
+        lastFrameTime=ts;
+
+        if(!paused) computeNextGen();
+
+        // Cosmic ray mutations (abiogenesis): inject random living cells (value 2 = cosmic ray marker)
+        if (gameMode === 'abiogenesis' && !paused && cosmicRayRate > 0) {
+            for (let m = 0; m < cosmicRayRate; m++) {
+                const idx = Math.floor(Math.random() * grid.length);
+                grid[idx] = 2; // 2 = freshly injected by cosmic ray
+            }
+        }
+
+        // Resonanz: mic-driven cell injection
+        if (gameMode === 'resonanz' && !paused) {
+            updateMicLevel();
+            // Scale: at full volume, inject ~300 cells/frame in clusters
+            const cellCount = Math.floor(micLevel * micLevel * 300);
+            if (cellCount > 0) {
+                // Inject as small clusters (3-5 cells) for better interaction
+                const clusters = Math.max(1, Math.floor(cellCount / 4));
+                for (let c = 0; c < clusters; c++) {
+                    const cx = Math.floor(Math.random() * W);
+                    const cy = Math.floor(Math.random() * H);
+                    // Small random cluster around center point
+                    const size = 1 + Math.floor(Math.random() * 3);
+                    for (let dy = -size; dy <= size; dy++) {
+                        for (let dx = -size; dx <= size; dx++) {
+                            if (dx*dx + dy*dy > size*size) continue;
+                            if (Math.random() < 0.6) {
+                                grid[((cy+dy+H)%H)*W + ((cx+dx+W)%W)] = 2; // value 2 = sound-injected
+                            }
+                        }
+                    }
+                }
+            }
+            // Update mic UI
+            const bar = document.getElementById('micBar');
+            const pct = Math.round(micLevel * 100);
+            bar.style.width = pct + '%';
+            bar.classList.toggle('hot', micLevel > 0.5);
+            document.getElementById('micValue').textContent =
+                cellCount > 0 ? `${pct}% · ${cellCount} Zellen/Frame` : `${pct}%`;
+        }
+
+        let liveCount=0;
+        let speciesCounts=[0,0,0,0];
+
+        const showTrails=trailsEnabled||titleActive;
+
+        if(showTrails){
+            for(let i=0;i<grid.length;i++){
+                if(grid[i]>0){trailGrid[i]=1.0;trailSpecies[i]=grid[i];}
+                else{trailGrid[i]*=TRAIL_DECAY;if(trailGrid[i]<0.008)trailGrid[i]=0;}
+            }
+        }
+
+        if(gameMode==='immigration'){
+            for(let i=0;i<grid.length;i++){
+                const p=i*4;
+                const v=grid[i];
+                if(v>0){
+                    const sc=SPECIES_COLORS[v];
+                    data[p]=sc.r;data[p+1]=sc.g;data[p+2]=sc.b;data[p+3]=255;
+                    liveCount++; speciesCounts[v]++;
+                } else if(showTrails&&trailGrid[i]>0){
+                    const t=trailGrid[i]*trailGrid[i];
+                    const sc=SPECIES_COLORS[trailSpecies[i]]||SPECIES_COLORS[1];
+                    data[p]=(sc.r*t*0.4)|0;data[p+1]=(sc.g*t*0.4)|0;data[p+2]=(sc.b*t*0.4)|0;data[p+3]=255;
+                } else {
+                    data[p]=0;data[p+1]=0;data[p+2]=0;data[p+3]=255;
+                }
+            }
+        } else {
+            const{r,g,b}=currentRGB;
+            for(let i=0;i<grid.length;i++){
+                const p=i*4;
+                if(grid[i]===2){
+                    // Injected energy flash: amber for resonanz, magenta for abiogenesis
+                    if (gameMode === 'resonanz') {
+                        data[p]=255;data[p+1]=160;data[p+2]=30;data[p+3]=255;
+                    } else {
+                        data[p]=255;data[p+1]=50;data[p+2]=120;data[p+3]=255;
+                    }
+                    liveCount++;
+                } else if(grid[i]>0){
+                    data[p]=r;data[p+1]=g;data[p+2]=b;data[p+3]=255;
+                    liveCount++;
+                } else if(showTrails&&trailGrid[i]>0){
+                    const t=trailGrid[i]*trailGrid[i];
+                    data[p]=(r*t*0.45)|0;data[p+1]=(g*t*0.45)|0;data[p+2]=(b*t*0.45)|0;data[p+3]=255;
+                } else {
+                    data[p]=0;data[p+1]=0;data[p+2]=0;data[p+3]=255;
+                }
+            }
+        }
+        ctx.putImageData(imgData,0,0);
+
+        // Stats
+        document.getElementById('genCounter').textContent=`Gen ${generation.toLocaleString()}`;
+        if(gameMode==='immigration'){
+            document.getElementById('cellCount').innerHTML=
+                `<span style="color:#00cca8">${speciesCounts[1].toLocaleString()}</span> · `+
+                `<span style="color:#cc2a6e">${speciesCounts[2].toLocaleString()}</span> · `+
+                `<span style="color:#cca800">${speciesCounts[3].toLocaleString()}</span> · `+
+                `Σ ${liveCount.toLocaleString()}`;
+        } else {
+            document.getElementById('cellCount').textContent=`${liveCount.toLocaleString()} lebende Zellen`;
+        }
+
+        drawPopGraph(liveCount, speciesCounts);
+
+        // Entropy graph (abiogenesis and resonanz modes)
+        if ((gameMode === 'abiogenesis' || gameMode === 'resonanz') && !paused) {
+            const metrics = computeEntropy();
+            drawEntropyGraph(metrics);
+        }
+    }
+
+    // =====================================================
+    //  INIT
+    // =====================================================
+    randomize();
+    trailGrid.fill(0);
+    updateCanvasTransform();
+    updateModeBadge();
+    window.addEventListener('resize', updateCanvasTransform);
+    requestAnimationFrame(update);
+    </script>
+</body>
+</html>
