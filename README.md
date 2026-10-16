@@ -5,6 +5,8 @@ Wie entsteht aus einfachsten Regeln unvorhersehbare Komplexität? Wie wird aus O
 John Horton Conways Game of Life (1970) ist kein Spiel im herkömmlichen Sinne, sondern es ist vielmehr eine Weltmaschine. Ein Gitter aus Zellen, die nach drei simplen Regeln leben oder sterben, und dabei Strukturen hervorbringen, die niemand vorhersagen konnte: pulsierende Organismen, wandernde Gleiter, sich selbst reproduzierende Muster.
 Die drei Regeln: Geburt (eine tote Zelle mit genau drei lebenden Nachbarn wird lebendig), Überleben (eine lebende Zelle mit zwei oder drei Nachbarn überlebt) sowie Tod (in allen anderen Fällen stirbt die Zelle, durch Einsamkeit oder Überbevölkerung). Aus diesen drei Sätzen entsteht ein Universum, das Biologen, Physiker, Informatiker und Philosophen seit über fünf Jahrzehnten fasziniert.
 
+# https://jonathanharth.github.io/automaton-life/
+
 # Emergenz, Chaos und die Natur des Lebendigen
 Conways Game of Life ist zum kanonischen Beispiel für Emergenz geworden. Ddas Phänomen, dass aus dem Zusammenspiel einfacher Teile Eigenschaften entstehen, die keiner der Teile allein besitzt. Drei triviale Regeln erzeugen Gebilde, die sich selbst fortbewegen (Glider), sich vermehren (Gosper Glider Gun) oder sogar beliebige Berechnungen durchführen — das System ist nachweislich Turing-vollständig. Conway selbst nannte es ein ‚no-player game“: Der Mensch legt den Anfangszustand fest, danach gehört die Welt sich selbst.
 In der aktuellen Komplexitätsforschung dient das Game of Life als Modell für emergente Phänomene in der Natur: Schwarmbildung bei Vögeln, Musterbildung auf Tierhäuten, Selbstorganisation neuronaler Netzwerke.
